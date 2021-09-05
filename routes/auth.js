@@ -3,12 +3,13 @@ const User = require('../models/User');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const fetchuser = require('../middleware/fetchuser')
 
 const router = express.Router();
 
 const SECRET = "singhisking"
 
-// Register a user using : POST "/api/auth/register". No login required
+// ROUTE_1 - Register a user using : POST "/api/auth/register". No login required
 router.post('/register', [
     body('name', "Your name should at lease 2 characters long.").isLength({ min: 2 }),
     body('password', "Your password should at lease 5 characters long.").isLength({ min: 5 }),
@@ -40,17 +41,74 @@ router.post('/register', [
         })
 
         // Generating auth token to return
-        let data = {
+        let payload = {
             user: {
                 id: user.id
             }
         }
-        const authtoken = jwt.sign(data, SECRET)
+        const authtoken = jwt.sign(payload, SECRET)
 
         res.json({authtoken})
-    } catch (err) {
-        console.error(err.message)
-        res.status(500).json({ error: "Some unknown error occured!" })
+    } catch (error) {
+        console.error(error.message)
+        res.status(500).json({ error: "Internal Server Error" })
+    }
+})
+
+// ROUTE_2 - Authenticate a user using : POST "/api/auth/login". No login required
+router.post('/login', [
+    body('email', "Entered email is not valid.").isEmail(),
+    body('password', "Password cannob be blank").exists()
+], async (req, res) => {
+
+    // Finds the validation errors in this request and wraps them in an error message and returns bad request
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+        const {email, password} = req.body;
+
+        // Check if the user exists with the email
+        let user = await User.findOne({ email })
+        if (!user) {
+            return res.status(400).json({ error: "Your email or password is wrong!" })
+        }
+
+        // Compare the password with the stored password and authenticate
+        let passwordMatched = await bcrypt.compare(password, user.password)
+        if (!passwordMatched) {
+            return res.status(400).json({ error: "Your email or password is wrong!" })
+        }
+
+        // Everything is good!!
+
+        // Generating auth token to return
+        let payload = {
+            user: {
+                id: user.id
+            }
+        }
+        const authtoken = jwt.sign(payload, SECRET)
+
+        res.json({authtoken})
+
+    } catch (error) {
+        console.error(error.message)
+        res.status(500).json({ error: "Internal Server Error" })
+    }
+})
+
+// ROUTE_3 - Get a user using : GET "/api/auth/get". Login required
+router.get('/getuser', fetchuser, async (req, res) => {
+    try {
+        let userId = req.user.id;
+        const user = await User.findById(userId).select('-password')
+        res.json({user})
+    } catch (error) {
+        console.error(error.message)
+        res.status(500).json({ error: "Internal Server Error" })
     }
 })
 
