@@ -1,8 +1,12 @@
 const express = require('express');
 const User = require('../models/User');
 const { body, validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
 
 const router = express.Router();
+
+const SECRET = "singhisking"
 
 // Register a user using : POST "/api/auth/register". No login required
 router.post('/register', [
@@ -10,7 +14,7 @@ router.post('/register', [
     body('password', "Your password should at lease 5 characters long.").isLength({ min: 5 }),
     body('email', "Entered email is not valid.").isEmail()
 ], async (req, res) => {
-    
+
     // Finds the validation errors in this request and wraps them in an error message and returns bad request
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -24,14 +28,26 @@ router.post('/register', [
             return res.status(400).json({ error: "User with this E-Mail already exists!" })
         }
 
+        // Securing the password by hashing
+        let salt = await bcrypt.genSalt(10)
+        let secPass = await bcrypt.hash(req.body.password, salt)
+
         // Create a new user 
         user = await User.create({
             name: req.body.name,
-            password: req.body.password,
+            password: secPass,
             email: req.body.email
         })
 
-        res.json({ message: "User registered successfully" })
+        // Generating auth token to return
+        let data = {
+            user: {
+                id: user.id
+            }
+        }
+        const authtoken = jwt.sign(data, SECRET)
+
+        res.json({authtoken})
     } catch (err) {
         console.error(err.message)
         res.status(500).json({ error: "Some unknown error occured!" })
